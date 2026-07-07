@@ -1,66 +1,129 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import { useState } from 'react';
+
+type DownloadType = 'video' | 'audio';
 
 export default function Home() {
+  const [url, setUrl] = useState('');
+  const [type, setType] = useState<DownloadType>('video');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    if (!url.trim()) {
+      setError('Please enter a valid media URL.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      // Create object URL and download manually to handle streaming UI gracefully
+      const response = await fetch(`/api/download?url=${encodeURIComponent(url)}&type=${type}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to process download link. Check if the URL is valid and supported.');
+      }
+
+      // Get content disposition header to extract filename
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `download.${type === 'video' ? 'mp4' : 'mp3'}`;
+
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      // Stream the response into a blob
+      const blob = await response.blob();
+      const tempUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = tempUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(tempUrl);
+
+      setSuccess(`Successfully downloaded ${filename}!`);
+      setUrl(''); // Clear input
+
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'An unexpected error occurred during download.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main>
+      <h1>Universal Media Fisher</h1>
+      <p className="subtitle">Seamless high-quality extractions.</p>
+
+      <div className="glass-container">
+        <div className="input-group">
+          <label className="input-label" htmlFor="media-url">Media Link</label>
+          <input
+            id="media-url"
+            type="text"
+            className="styled-input"
+            placeholder="Paste your YouTube or media link here..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            disabled={isLoading}
+          />
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <div className="controls-group">
+          <div
+            className={`toggle-option ${type === 'video' ? 'active' : ''}`}
+            onClick={() => !isLoading && setType('video')}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Highest Quality MP4
+          </div>
+          <div
+            className={`toggle-option ${type === 'audio' ? 'active' : ''}`}
+            onClick={() => !isLoading && setType('audio')}
           >
-            Documentation
-          </a>
+            Highest Quality MP3
+          </div>
         </div>
-      </main>
-    </div>
+
+        <button
+          className="download-btn"
+          onClick={handleDownload}
+          disabled={isLoading || !url.trim()}
+        >
+          {isLoading ? (
+            <>
+              <span className="loader"></span>
+              Extracting...
+            </>
+          ) : (
+            `Download ${type === 'video' ? 'Video' : 'Audio'}`
+          )}
+        </button>
+
+        {error && (
+          <div className="status-message error">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="status-message success">
+            {success}
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
